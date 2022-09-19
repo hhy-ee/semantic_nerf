@@ -6,6 +6,7 @@ from SSR.datasets.replica import replica_datasets
 from SSR.datasets.scannet import scannet_datasets
 from SSR.datasets.replica_nyu import replica_nyu_cnn_datasets
 from SSR.datasets.scannet import scannet_datasets
+from SSR.datasets.mydata import my_datasets
 
 from SSR.training import trainer
 
@@ -14,9 +15,7 @@ import time
 
 def train():
     parser = argparse.ArgumentParser()
-    # parser.add_argument('--config_file', type=str, default="/home/shuaifeng/Documents/PhD_Research/CodeRelease/SemanticSceneRepresentations/SSR/configs/SSR_room2_config_release.yaml", 
-    #                     help='config file name.')
-    parser.add_argument('--config_file', type=str, default="/home/shuaifeng/Documents/PhD_Research/CodeRelease/SemanticSceneRepresentations/SSR/configs/SSR_room0_config_test.yaml", 
+    parser.add_argument('--config_file', type=str, default="/home/ps/hhy/semantic_nerf/SSR/configs/SSR_config_test.yaml", 
                     help='config file name.')
     parser.add_argument('--dataset_type', type=str, default="replica", choices= ["replica", "replica_nyu_cnn", "scannet"], 
                         help='the dataset to be used,')
@@ -65,7 +64,14 @@ def train():
     parser.add_argument('--load_saved',  action='store_true', help='use trained noisy labels for training to ensure consistency betwwen experiments')
     parser.add_argument('--gpu', type=str, default="", help='GPU IDs.')
 
-    args = parser.parse_args()
+    # args = parser.parse_args()
+    # args = parser.parse_args(['--config_file',"/home/ps/hhy/semantic_nerf/SSR/configs/SSR_config_test.yaml"])
+    args = parser.parse_args(['--config_file',"/home/ps/hhy/semantic_nerf/SSR/configs/SSR_myroom2_bfpose_config_10frame_complete.yaml"])
+    args.dataset_type = 'mydata'
+    
+    # args = parser.parse_args(['--config_file',"/home/ps/hhy/semantic_nerf/SSR/configs/SSR_scene2_mydata_bfpose_config_10frame_complete.yaml"])
+    # args.dataset_type = 'scannet'
+
     # Read YAML file
     with open(args.config_file, 'r') as f:
         config = yaml.safe_load(f)
@@ -82,8 +88,23 @@ def train():
 
         total_num = 900
         step = 5
-        train_ids = list(range(0, total_num, step))
-        test_ids = [x+step//2 for x in train_ids]  
+
+        # 10 frame
+        if "complete" not in args.config_file: 
+            train_ids = list(range(0, total_num, step))[:10]
+            test_ids = [x+step//2 for x in list(range(0, total_num, step))]
+        # 10 frame complete
+        if "complete" in args.config_file: 
+            train_ids = list(range(0, total_num, 90))
+            test_ids = [x+step//2 for x in list(range(0, total_num, step))]
+
+        train_ids = list(range(0, total_num, 1))
+
+        # 180 frame
+        # train_ids = list(range(0, total_num, step))
+        # test_ids = [x+step//2 for x in list(range(0, total_num, step))]
+
+
         #add ids to config for later saving.
         config["experiment"]["train_ids"] = train_ids
         config["experiment"]["test_ids"] = test_ids
@@ -166,7 +187,8 @@ def train():
                                                                     img_h=config["experiment"]["height"],
                                                                     img_w=config["experiment"]["width"],
                                                                     sample_step=config["experiment"]["sample_step"],
-                                                                    save_dir=config["experiment"]["dataset_dir"])
+                                                                    save_dir=config["experiment"]["dataset_dir"],
+                                                                    args = args)
 
 
         print("--------------------")
@@ -193,6 +215,22 @@ def train():
         ssr_trainer.set_params_scannet(scannet_data_loader)
         ssr_trainer.prepare_data_scannet(scannet_data_loader)
 
+    elif args.dataset_type == "mydata":
+        print("----- My Own Dataset with NYUv2-40 Conventions-----")
+
+        print("processing Mydata scene: ", os.path.basename(config["experiment"]["dataset_dir"]))
+        # Todo: like nerf, creating sprial/test poses. Make training and test poses/ids interleaved
+        my_data_loader = my_datasets.My_Dataset( scene_dir=config["experiment"]["dataset_dir"],
+                                                                    img_h=config["experiment"]["height"],
+                                                                    img_w=config["experiment"]["width"],
+                                                                    sample_step=config["experiment"]["sample_step"],
+                                                                    save_dir=config["experiment"]["dataset_dir"],
+                                                                    args = args)
+
+
+        print("--------------------")
+        ssr_trainer.set_params_scannet(my_data_loader)
+        ssr_trainer.prepare_data_scannet(my_data_loader)
     
     # Create nerf model, init optimizer
     ssr_trainer.create_ssr()

@@ -52,7 +52,7 @@ def load_scannet_nyu40_mapping(path):
 
     mapping = {}
     # added by hhy
-    path = os.path.dirname(os.path.dirname(path))
+    path = os.path.join(os.path.dirname(path), 'labels_combined')
     
     with open(os.path.join(path, 'scannetv2-labels.combined.tsv')) as tsvfile:
         tsvreader = csv.reader(tsvfile, delimiter='\t')

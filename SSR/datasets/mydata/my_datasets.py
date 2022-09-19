@@ -5,9 +5,9 @@ from skimage.io import imread
 import cv2
 import imageio
 
-from SSR.datasets.scannet.scannet_utils import load_scannet_nyu40_mapping, load_scannet_nyu13_mapping
+from SSR.datasets.mydata.mydata_utils import load_scannet_nyu40_mapping, load_scannet_nyu13_mapping
 from SSR.utils import image_utils
-class ScanNet_Dataset(object):
+class My_Dataset(object):
     def __init__(self, scene_dir, args, img_h=None, img_w=None, sample_step=1, save_dir=None, mode="nyu40"):
         # we only use rgb+poses from Scannet
         self.img_h = img_h
@@ -18,8 +18,8 @@ class ScanNet_Dataset(object):
         scene_name = os.path.basename(scene_dir)
         data_dir = os.path.dirname(scene_dir)
 
-        instance_filt_dir =  os.path.join(scene_dir, scene_name+'_2d-instance-filt')
-        label_filt_dir =  os.path.join(scene_dir, scene_name+'_2d-label-filt')
+        instance_filt_dir =  os.path.join(scene_dir, 'label', '_label')
+        label_filt_dir =  os.path.join(scene_dir, 'label', '_label')
         self.semantic_class_dir = label_filt_dir
 
         # (0 corresponds to unannotated or no depth).
@@ -35,24 +35,10 @@ class ScanNet_Dataset(object):
             assert False
 
         # get camera intrinsics
-        # we use color camera intrinsics and resize depth to match
-        with open(os.path.join(scene_dir, "{}.txt".format(scene_name))) as info_f:
-            info = [line.rstrip().split(' = ') for line in info_f]
-            info = {key:value for key, value in info}
-            intrinsics = [
-                [float(info['fx_color']), 0, float(info['mx_color'])],
-                [0, float(info['fy_color']), float(info['my_color'])],
-                [0, 0, 1]]
-
-            original_colour_h = int(info["colorHeight"])
-            original_colour_w = int(info["colorWidth"])
-            original_depth_h = int(info["depthHeight"])
-            original_depth_w = int(info["depthWidth"])
-            assert original_colour_h==968 and original_colour_w==1296 and original_depth_h==480 and original_depth_w==640
-
+        intrinsics = np.loadtxt(os.path.join(scene_dir, 'intrinsic', 'intrinsic_color.txt'))[:3, :3]
+                
         # load 2D colour frames and poses
-
-        frame_ids = os.listdir(os.path.join(scene_dir, "renders", 'color'))
+        frame_ids = os.listdir(os.path.join(scene_dir, 'color'))
         frame_ids = [int(os.path.splitext(frame)[0]) for frame in frame_ids]
         frame_ids =  sorted(frame_ids)
 
@@ -61,16 +47,16 @@ class ScanNet_Dataset(object):
             if i%25==0:
                 print('preparing %s frame %d/%d'%(scene_name, i, len(frame_ids)))
 
-            pose = np.loadtxt(os.path.join(scene_dir, "renders", 'pose', '%d.txt' % frame_id))
+            pose = np.loadtxt(os.path.join(scene_dir, 'pose', '%d.txt' % frame_id))
 
             # skip frames with no valid pose
             if not np.all(np.isfinite(pose)):
                 continue
 
             frame = {'file_name_image': 
-                        os.path.join(scene_dir, "renders", 'color', '%d.jpg'%frame_id),
+                        os.path.join(scene_dir, 'color', '%d.jpg'%frame_id),
                     'file_name_depth': 
-                        os.path.join(scene_dir, "renders", 'depth', '%d.png'%frame_id),
+                        os.path.join(scene_dir, 'depth', '%d.png'%frame_id),
                     'file_name_instance': 
                         os.path.join(instance_filt_dir, '%d.png'%frame_id),
                     'file_name_label': 
@@ -124,17 +110,13 @@ class ScanNet_Dataset(object):
         # training samples
         for idx in train_ids:
             image = cv2.imread(frames_file_list[idx]["file_name_image"])[:,:,::-1] # change from BGR uinit 8 to RGB float
-            image = cv2.copyMakeBorder(src=image, top=2, bottom=2, left=0, right=0, borderType=cv2.BORDER_CONSTANT, value=[0,0,0]) # pad 4 pixels to height so that images have aspect ratio of 4:3
-            assert image.shape[0]/image.shape[1]==3/4 and image.shape[1]==original_colour_w and image.shape[0] == 972
             image = image/255.0
 
             depth = cv2.imread(frames_file_list[idx]["file_name_depth"], cv2.IMREAD_UNCHANGED) / 1000.0  # uint16 mm depth, then turn depth from mm to meter
 
             semantic = cv2.imread(frames_file_list[idx]["file_name_label"], cv2.IMREAD_UNCHANGED)
-            semantic = cv2.copyMakeBorder(src=semantic, top=2, bottom=2, left=0, right=0, borderType=cv2.BORDER_CONSTANT, value=0)
 
             instance = cv2.imread(frames_file_list[idx]["file_name_instance"], cv2.IMREAD_UNCHANGED)
-            instance = cv2.copyMakeBorder(src=instance, top=2, bottom=2, left=0, right=0, borderType=cv2.BORDER_CONSTANT, value=0)
 
             T_wc = frames_file_list[idx]["pose"].reshape((4, 4))
 
@@ -155,17 +137,13 @@ class ScanNet_Dataset(object):
         # test samples
         for idx in test_ids:
             image = cv2.imread(frames_file_list[idx]["file_name_image"])[:,:,::-1] # change from BGR uinit 8 to RGB float
-            image = cv2.copyMakeBorder(src=image, top=2, bottom=2, left=0, right=0, borderType=cv2.BORDER_CONSTANT, value=[0,0,0]) # pad 4 pixels to height so that images have aspect ratio of 4:3
-            assert image.shape[0]/image.shape[1]==3/4 and image.shape[1]==original_colour_w and image.shape[0] == 972
             image = image/255.0
 
             depth = cv2.imread(frames_file_list[idx]["file_name_depth"], cv2.IMREAD_UNCHANGED) / 1000.0  # uint16 mm depth, then turn depth from mm to meter
             
             semantic = cv2.imread(frames_file_list[idx]["file_name_label"], cv2.IMREAD_UNCHANGED)
-            semantic = cv2.copyMakeBorder(src=semantic, top=2, bottom=2, left=0, right=0, borderType=cv2.BORDER_CONSTANT, value=0)
 
             instance = cv2.imread(frames_file_list[idx]["file_name_instance"], cv2.IMREAD_UNCHANGED)
-            instance = cv2.copyMakeBorder(src=instance, top=2, bottom=2, left=0, right=0, borderType=cv2.BORDER_CONSTANT, value=0)
 
             T_wc = frames_file_list[idx]["pose"].reshape((4, 4))
 

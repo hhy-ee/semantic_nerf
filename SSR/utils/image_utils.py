@@ -4,6 +4,8 @@ import numpy as np
 import imgviz
 from imgviz import label_colormap
 from imgviz import draw as draw_module
+import matplotlib
+matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 
 def numpy2cv(image):
